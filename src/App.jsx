@@ -205,24 +205,28 @@ export default function App() {
             ) : (
               <ul className="space-y-3">
                 {reports.map(r => (
-                  <li key={r.id} className="bg-white/20 p-3 rounded flex items-start justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-white">{r.description || 'بدون شرح'}</div>
-                      <div className="text-xs text-white/80">{dayjs(r.report_at).format('YYYY-MM-DD HH:mm')} • {Number(r.amount).toLocaleString()} تومان</div>
-                      <div className="text-xs text-white/70 mt-1">ثبت‌شده: {dayjs(r.created_at).fromNow()}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {user && user.id === r.user_id ? (
-                        <>
-                          <button onClick={() => startEdit(r)} className="px-3 py-1 bg-white/10 text-white rounded">ویرایش</button>
-                          <button onClick={() => remove(r.id)} className="px-3 py-1 bg-red-600 text-white rounded">حذف</button>
-                        </>
-                      ) : (
-                        <div className="text-xs text-white/60">غیر قابل تغییر</div>
-                      )}
-                    </div>
-                  </li>
-                ))}
+  <li key={r.id} className="bg-white/20 p-3 rounded flex items-start justify-between">
+    <div>
+      {/* فقط مدیر ایمیل ثبت‌کننده را می‌بینه */}
+      {user.email === 'admin@example.com' && r.user?.email && (
+        <div className="text-xs text-white/70 mb-1">ثبت‌کننده: {r.user.email}</div>
+      )}
+      <div className="text-sm font-medium text-white">{r.description || 'بدون شرح'}</div>
+      <div className="text-xs text-white/80">{dayjs(r.report_at).format('YYYY-MM-DD HH:mm')} • {Number(r.amount).toLocaleString()} تومان</div>
+      <div className="text-xs text-white/70 mt-1">ثبت‌شده: {dayjs(r.created_at).fromNow()}</div>
+    </div>
+    <div className="flex items-center gap-2">
+      {user && user.id === r.user_id ? (
+        <>
+          <button onClick={() => startEdit(r)} className="px-3 py-1 bg-white/10 text-white rounded">ویرایش</button>
+          <button onClick={() => remove(r.id)} className="px-3 py-1 bg-red-600 text-white rounded">حذف</button>
+        </>
+      ) : (
+        <div className="text-xs text-white/60">غیر قابل تغییر</div>
+      )}
+    </div>
+  </li>
+))}
               </ul>
             )}
           </section>
