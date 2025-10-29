@@ -83,8 +83,6 @@ export default function App() {
   setReports([]);
   setEditing(null);
   setForm({ report_at: '', amount: '', description: '' });
-
-  // این خط تضمین می‌کنه که AuthPanel دوباره نمایش داده شود
   setAlert({ type: 'success', message: 'خروج انجام شد.' });
 }
 
