@@ -20,11 +20,14 @@ export default function App() {
   const [editing, setEditing] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-    });
+  async function checkSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  setSession(session);
+  setUser(session?.user ?? null);
+}
+
+checkSession();
+
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, data) => {
       setSession(data.session);
