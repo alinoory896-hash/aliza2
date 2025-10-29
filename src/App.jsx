@@ -39,8 +39,13 @@ checkSession();
   }, []);
 
   useEffect(() => {
-    if (user) fetchReports();
-  }, [user]);
+  if (user) {
+    fetchReports();
+  } else {
+    setReports([]); // وقتی کاربر نیست، لیست گزارش‌ها خالی میشه
+  }
+}, [user]);
+
 
   async function signUp(email, password) {
     setLoading(true);
@@ -68,6 +73,7 @@ checkSession();
   }
 
   async function fetchReports() {
+    if (!user) return; // اگر کاربر نیست، هیچ کاری انجام نده
     setLoading(true);
     const { data, error } = await supabase
       .from('reports')
