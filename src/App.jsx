@@ -20,29 +20,33 @@ export default function App() {
   const [editing, setEditing] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  // بررسی session هنگام load اولیه
+  // بررسی session و listener روی auth state
   useEffect(() => {
-    async function checkSession() {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session) fetchReports();
     }
-    checkSession();
+    init();
 
-    // Listener تغییرات auth
     const { data: listener } = supabase.auth.onAuthStateChange((_event, data) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
       if (data.session) fetchReports();
       else setReports([]);
     });
+
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // وقتی user تغییر کرد، گزارش‌ها را fetch کن یا خالی کن
+  // هر بار user تغییر کرد
   useEffect(() => {
-    if (user) fetchReports();
-    else setReports([]);
+    if (user) {
+      fetchReports();
+    } else {
+      setReports([]);
+    }
   }, [user]);
 
   async function signUp(email, password) {
@@ -64,20 +68,31 @@ export default function App() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setReports([]); // پاک کردن گزارش‌ها بعد از خروج
-    setAlert({ type: 'success', message: 'خروج انجام شد.' });
+  setLoading(true);
+  const { error } = await supabase.auth.signOut();
+  setLoading(false);
+
+  if (error) {
+    setAlert({ type: 'error', message: error.message });
+    return;
   }
 
+  // پاک کردن state ها بعد از خروج
+  setSession(null);
+  setUser(null);
+  setReports([]);
+  setEditing(null);
+  setForm({ report_at: '', amount: '', description: '' });
+  setAlert({ type: 'success', message: 'خروج انجام شد.' });
+}
+
   async function fetchReports() {
-    if (!user) return;
+    if (!user) return; // اگر کاربر نیست هیچ کاری انجام نده
     setLoading(true);
     const { data, error } = await supabase
       .from('reports')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', user.id) // فقط گزارش‌های کاربر
       .order('created_at', { ascending: false });
     setLoading(false);
     if (error) return setAlert({ type: 'error', message: error.message });
@@ -91,6 +106,7 @@ export default function App() {
   async function createOrUpdate(e) {
     e.preventDefault();
     if (!user) return setAlert({ type: 'error', message: 'ابتدا وارد شوید.' });
+
     const payload = {
       user_id: user.id,
       report_at: form.report_at ? new Date(form.report_at).toISOString() : new Date().toISOString(),
@@ -108,6 +124,7 @@ export default function App() {
       if (error) return setAlert({ type: 'error', message: error.message });
       setAlert({ type: 'success', message: 'بروزرسانی شد.' });
       setEditing(null);
+      fetchReports();
     } else {
       const { data, error } = await supabase
         .from('reports')
@@ -121,7 +138,6 @@ export default function App() {
     }
 
     setForm({ report_at: '', amount: '', description: '' });
-    fetchReports();
   }
 
   async function startEdit(item) {
@@ -144,7 +160,7 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-yellow-400 via-blue-500 to-blue-800 text-slate-900 p-6">
       <div className="max-w-4xl mx-auto">
         <header className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">گزارش یار</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight"></h1>
           <div>
             {user ? (
               <div className="flex items-center gap-3">
