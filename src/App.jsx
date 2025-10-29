@@ -65,15 +65,35 @@ export default function App() {
   }
 
   async function fetchReports() {
-    setLoading(true);
-    const { data, error } = await supabase
+  if (!user) return;
+  setLoading(true);
+
+  let query;
+
+  if (user.email === 'admin@example.com') {
+    // مدیر: همه رکوردها + ایمیل ثبت کننده
+    query = supabase
+      .from('reports')
+      .select(`
+        *,
+        user: user_id (email)
+      `)
+      .order('created_at', { ascending: false });
+  } else {
+    // کاربران عادی: فقط رکورد خودشون
+    query = supabase
       .from('reports')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setLoading(false);
-    if (error) return setAlert({ type: 'error', message: error.message });
-    setReports(data ?? []);
   }
+
+  const { data, error } = await query;
+  setLoading(false);
+  if (error) return setAlert({ type: 'error', message: error.message });
+  setReports(data ?? []);
+}
+
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
