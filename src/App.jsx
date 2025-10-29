@@ -20,14 +20,15 @@ export default function App() {
   const [editing, setEditing] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  async function checkSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  setSession(session);
-  setUser(session?.user ?? null);
-}
-
-checkSession();
-
+  // بررسی session و listener روی auth state
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session) fetchReports();
+    }
+    init();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, data) => {
       setSession(data.session);
@@ -35,17 +36,18 @@ checkSession();
       if (data.session) fetchReports();
       else setReports([]);
     });
+
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // هر بار user تغییر کرد
   useEffect(() => {
-  if (user) {
-    fetchReports();
-  } else {
-    setReports([]); // وقتی کاربر نیست، لیست گزارش‌ها خالی میشه
-  }
-}, [user]);
-
+    if (user) {
+      fetchReports();
+    } else {
+      setReports([]);
+    }
+  }, [user]);
 
   async function signUp(email, password) {
     setLoading(true);
@@ -69,15 +71,17 @@ checkSession();
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
+    setReports([]);
     setAlert({ type: 'success', message: 'خروج انجام شد.' });
   }
 
   async function fetchReports() {
-    if (!user) return; // اگر کاربر نیست، هیچ کاری انجام نده
+    if (!user) return; // اگر کاربر نیست هیچ کاری انجام نده
     setLoading(true);
     const { data, error } = await supabase
       .from('reports')
       .select('*')
+      .eq('user_id', user.id) // فقط گزارش‌های کاربر
       .order('created_at', { ascending: false });
     setLoading(false);
     if (error) return setAlert({ type: 'error', message: error.message });
@@ -91,6 +95,7 @@ checkSession();
   async function createOrUpdate(e) {
     e.preventDefault();
     if (!user) return setAlert({ type: 'error', message: 'ابتدا وارد شوید.' });
+
     const payload = {
       user_id: user.id,
       report_at: form.report_at ? new Date(form.report_at).toISOString() : new Date().toISOString(),
@@ -108,6 +113,7 @@ checkSession();
       if (error) return setAlert({ type: 'error', message: error.message });
       setAlert({ type: 'success', message: 'بروزرسانی شد.' });
       setEditing(null);
+      fetchReports();
     } else {
       const { data, error } = await supabase
         .from('reports')
@@ -121,7 +127,6 @@ checkSession();
     }
 
     setForm({ report_at: '', amount: '', description: '' });
-    fetchReports();
   }
 
   async function startEdit(item) {
