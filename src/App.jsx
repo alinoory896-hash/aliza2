@@ -88,17 +88,6 @@ export default function App() {
   setAlert({ type: 'success', message: 'خروج انجام شد.' });
 }
 
-
-  // پاک کردن state ها بعد از خروج
-  setSession(null);
-  setUser(null);
-  setReports([]);
-  setEditing(null);
-  setForm({ report_at: '', amount: '', description: '' });
-  setAlert({ type: 'success', message: 'خروج انجام شد.' });
-}
-
-
   async function fetchReports() {
     if (!user) return; // اگر کاربر نیست هیچ کاری انجام نده
     setLoading(true);
