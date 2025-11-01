@@ -6,6 +6,12 @@ import clsx from 'clsx';
 import './index.css';
 
 dayjs.extend(relativeTime);
+import jalaliday from 'jalaliday';
+
+dayjs.extend(relativeTime);
+dayjs.extend(jalaliday);
+dayjs.calendar('persian');
+
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -322,8 +328,10 @@ export default function App() {
                   <li key={r.id} className="bg-white/20 p-3 rounded flex items-start justify-between">
                     <div>
                       <div className="text-sm font-medium text-white">{r.description || 'بدون شرح'}</div>
-                      <div className="text-xs text-white/80">{dayjs(r.report_at).format('YYYY-MM-DD HH:mm')} • {Number(r.amount).toLocaleString()} تومان</div>
-                      <div className="text-xs text-white/70 mt-1">ثبت‌شده: {dayjs(r.created_at).fromNow()}</div>
+                      <div className="text-xs text-white/80">{dayjs(r.report_at).calendar('persian').locale('fa').format('YYYY/MM/DD - HH:mm')}
+ • {Number(r.amount).toLocaleString()} تومان</div>
+                      <div className="text-xs text-white/70 mt-1">ثبت‌شده: {dayjs(r.created_at).calendar('persian').locale('fa').fromNow()}
+</div>
                     </div>
                     <div className="flex items-center gap-2">
                       {user && (user.id === r.user_id || isAdminUser(user)) ? (
