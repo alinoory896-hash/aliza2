@@ -252,7 +252,7 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-yellow-400 via-blue-500 to-blue-800 text-slate-900 p-6">
       <div className="max-w-4xl mx-auto">
         <header className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight">سامانه گزارش‌ها</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight"></h1>
           <div>
             {user ? (
               <div className="flex items-center gap-3">
