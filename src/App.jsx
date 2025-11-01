@@ -80,10 +80,14 @@ export default function App() {
 
   // ----- helper: تشخیص اکانت ادمین -----
   function isAdminUser(u) {
-    if (!u) return false;
-    // supabase ذخیرهٔ نقش معمولا در app_metadata.role یا user_metadata flags
-    return (u?.app_metadata?.role === 'admin') || (u?.user_metadata?.is_admin === true);
-  }
+  if (!u) return false;
+  return (
+    u?.app_metadata?.role === 'admin' ||
+    u?.user_metadata?.is_admin === true ||
+    u?.email === 'admin@example.com' // ✅ اضافه شود
+  );
+}
+
 
   // ----- خواندن گزارش‌ها، اکنون از user پارامتر می‌پذیرد تا بسته به caller از closure استفاده نشود -----
   async function fetchReports(forUser = user) {
