@@ -9,7 +9,13 @@ dayjs.extend(relativeTime);
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// اگر کلیدها تنظیم نشده بودند، هشدار نشون بدیم (به‌جای crash)
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn('Supabase env vars missing: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
+}
+
+const supabase = createClient(SUPABASE_URL ?? '', SUPABASE_ANON_KEY ?? '');
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -20,35 +26,99 @@ export default function App() {
   const [editing, setEditing] = useState(null);
   const [alert, setAlert] = useState(null);
 
-  // بررسی session و listener روی auth state
+  // ----- init: خواندن session اولیه و subscribe به تغییرات auth -----
   useEffect(() => {
+    let mounted = true;
+
     async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session) fetchReports();
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+        if (initialSession?.user) {
+          // فقط اگر session وجود داشت، گزارش‌ها رو بخوان
+          fetchReports(initialSession?.user);
+        } else {
+          setReports([]);
+        }
+      } catch (err) {
+        console.error('getSession error', err);
+      }
     }
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, data) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      if (data.session) fetchReports();
-      else setReports([]);
+    // ثبت listener با destructuring صحیح و unsubscribe درست
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // newSession ممکنه null بشه هنگام signOut
+      setSession(newSession ?? null);
+      setUser(newSession?.user ?? null);
+
+      if (newSession?.user) {
+        // کاربر لاگین شده -> بگیر گزارش‌ها (اگر لازم بود)
+        fetchReports(newSession.user);
+      } else {
+        // کاربر خارج شد -> گزارش‌ها را پاک کن
+        setReports([]);
+      }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      // unsubscribe اگر subscription موجود است
+      try { subscription.unsubscribe(); } catch (e) { /* ignore */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // هر بار user تغییر کرد
+  // اگر user تغییر کرد (برای اطمینان) => هماهنگ‌سازی گزارش‌ها
   useEffect(() => {
-    if (user) {
-      fetchReports();
-    } else {
-      setReports([]);
-    }
-  }, [user]);
+    if (user) fetchReports(user);
+    else setReports([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
+  // ----- helper: تشخیص اکانت ادمین -----
+  function isAdminUser(u) {
+    if (!u) return false;
+    // supabase ذخیرهٔ نقش معمولا در app_metadata.role یا user_metadata flags
+    return (u?.app_metadata?.role === 'admin') || (u?.user_metadata?.is_admin === true);
+  }
+
+  // ----- خواندن گزارش‌ها، اکنون از user پارامتر می‌پذیرد تا بسته به caller از closure استفاده نشود -----
+  async function fetchReports(forUser = user) {
+    if (!forUser) {
+      setReports([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const admin = isAdminUser(forUser);
+      let query = supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!admin) {
+        // فقط گزارش‌های خودِ کاربر
+        query = query.eq('user_id', forUser.id);
+      }
+
+      const { data, error } = await query;
+      setLoading(false);
+      if (error) {
+        setAlert({ type: 'error', message: error.message });
+        return;
+      }
+      setReports(data ?? []);
+    } catch (err) {
+      setLoading(false);
+      console.error('fetchReports error', err);
+      setAlert({ type: 'error', message: 'خطا در بارگذاری گزارش‌ها' });
+    }
+  }
+
+  // ----- auth actions -----
   async function signUp(email, password) {
     setLoading(true);
     const { error } = await supabase.auth.signUp({ email, password });
@@ -62,43 +132,32 @@ export default function App() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) return setAlert({ type: 'error', message: error.message });
-    setSession(data.session);
-    setUser(data.user);
+    // data.session و data.user معمولاً موجود هستند
+    setSession(data?.session ?? null);
+    setUser(data?.user ?? null);
     setAlert({ type: 'success', message: 'وارد شدید.' });
+    // fetchReports صدا زده می‌شه از listener یا از useEffect بالا، ولی برای پاسخ سریع می‌خوانیم:
+    if (data?.user) fetchReports(data.user);
   }
 
   async function signOut() {
-  setLoading(true);
-  const { error } = await supabase.auth.signOut();
-  setLoading(false);
-
-  if (error) {
-    setAlert({ type: 'error', message: error.message });
-    return;
-  }
-
-  // پاک کردن state ها بعد از خروج
-  setSession(null);
-  setUser(null);
-  setReports([]);
-  setEditing(null);
-  setForm({ report_at: '', amount: '', description: '' });
-  setAlert({ type: 'success', message: 'خروج انجام شد.' });
-}
-
-  async function fetchReports() {
-    if (!user) return; // اگر کاربر نیست هیچ کاری انجام نده
     setLoading(true);
-    const { data, error } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('user_id', user.id) // فقط گزارش‌های کاربر
-      .order('created_at', { ascending: false });
+    const { error } = await supabase.auth.signOut();
     setLoading(false);
-    if (error) return setAlert({ type: 'error', message: error.message });
-    setReports(data ?? []);
+    if (error) {
+      setAlert({ type: 'error', message: error.message });
+      return;
+    }
+    // پاکسازی صریح state بعد از خروج
+    setSession(null);
+    setUser(null);
+    setReports([]);
+    setEditing(null);
+    setForm({ report_at: '', amount: '', description: '' });
+    setAlert({ type: 'success', message: 'خروج انجام شد.' });
   }
 
+  // ----- فرم و CRUD گزارش‌ها -----
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
@@ -107,42 +166,66 @@ export default function App() {
     e.preventDefault();
     if (!user) return setAlert({ type: 'error', message: 'ابتدا وارد شوید.' });
 
+    // مقدار عددی برای amount
+    const parsedAmount = Number(form.amount);
+    const amountValue = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+
     const payload = {
       user_id: user.id,
       report_at: form.report_at ? new Date(form.report_at).toISOString() : new Date().toISOString(),
-      amount: form.amount || 0,
+      amount: amountValue,
       description: form.description || ''
     };
 
     setLoading(true);
-    if (editing) {
-      const { error } = await supabase
-        .from('reports')
-        .update({ report_at: payload.report_at, amount: payload.amount, description: payload.description })
-        .eq('id', editing.id);
-      setLoading(false);
-      if (error) return setAlert({ type: 'error', message: error.message });
-      setAlert({ type: 'success', message: 'بروزرسانی شد.' });
-      setEditing(null);
-      fetchReports();
-    } else {
-      const { data, error } = await supabase
-        .from('reports')
-        .insert(payload)
-        .select()
-        .single();
-      setLoading(false);
-      if (error) return setAlert({ type: 'error', message: error.message });
-      setAlert({ type: 'success', message: 'ثبت شد.' });
-      setReports(prev => [data, ...prev]);
-    }
+    try {
+      if (editing) {
+        const { error } = await supabase
+          .from('reports')
+          .update({
+            report_at: payload.report_at,
+            amount: payload.amount,
+            description: payload.description
+          })
+          .eq('id', editing.id);
 
-    setForm({ report_at: '', amount: '', description: '' });
+        setLoading(false);
+        if (error) return setAlert({ type: 'error', message: error.message });
+
+        setAlert({ type: 'success', message: 'بروزرسانی شد.' });
+        setEditing(null);
+        // به‌روزرسانی لیست از سرگیری
+        fetchReports();
+      } else {
+        const { data, error } = await supabase
+          .from('reports')
+          .insert(payload)
+          .select()
+          .single();
+
+        setLoading(false);
+        if (error) return setAlert({ type: 'error', message: error.message });
+
+        setAlert({ type: 'success', message: 'ثبت شد.' });
+        // prepend به لیست برای UX بهتر
+        setReports(prev => [data, ...prev]);
+      }
+      setForm({ report_at: '', amount: '', description: '' });
+    } catch (err) {
+      setLoading(false);
+      console.error('createOrUpdate error', err);
+      setAlert({ type: 'error', message: 'خطا در ثبت/بروزرسانی' });
+    }
   }
 
-  async function startEdit(item) {
+  function startEdit(item) {
     setEditing(item);
-    setForm({ report_at: dayjs(item.report_at).format('YYYY-MM-DDTHH:mm'), amount: item.amount, description: item.description });
+    // فرمت مناسب برای input datetime-local
+    setForm({
+      report_at: item.report_at ? dayjs(item.report_at).format('YYYY-MM-DDTHH:mm') : '',
+      amount: item.amount ?? '',
+      description: item.description ?? ''
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -156,11 +239,12 @@ export default function App() {
     setAlert({ type: 'success', message: 'حذف شد.' });
   }
 
+  // ----- UI -----
   return (
     <div className="min-h-screen bg-gradient-to-br from-yellow-400 via-blue-500 to-blue-800 text-slate-900 p-6">
       <div className="max-w-4xl mx-auto">
         <header className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-extrabold tracking-tight"></h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">سامانه گزارش‌ها</h1>
           <div>
             {user ? (
               <div className="flex items-center gap-3">
@@ -179,15 +263,36 @@ export default function App() {
             <form onSubmit={createOrUpdate} className="space-y-3">
               <div>
                 <label className="block text-sm">تاریخ و ساعت</label>
-                <input required name="report_at" value={form.report_at} onChange={handleChange} type="datetime-local" className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900" />
+                <input
+                  required
+                  name="report_at"
+                  value={form.report_at}
+                  onChange={handleChange}
+                  type="datetime-local"
+                  className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900"
+                />
               </div>
               <div>
                 <label className="block text-sm">مبلغ</label>
-                <input required name="amount" value={form.amount} onChange={handleChange} type="number" step="0.01" className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900" />
+                <input
+                  required
+                  name="amount"
+                  value={form.amount}
+                  onChange={handleChange}
+                  type="number"
+                  step="0.01"
+                  className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900"
+                />
               </div>
               <div>
                 <label className="block text-sm">شرح کالا</label>
-                <textarea name="description" value={form.description} onChange={handleChange} rows={4} className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900" />
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  rows={4}
+                  className="mt-1 w-full rounded p-2 bg-gray-100 text-slate-900"
+                />
               </div>
               <div className="flex gap-2">
                 <button className="flex-1 py-2 rounded bg-blue-700 text-white hover:scale-[1.01] transition">{editing ? 'بروزرسانی' : 'ثبت'}</button>
@@ -217,7 +322,7 @@ export default function App() {
                       <div className="text-xs text-white/70 mt-1">ثبت‌شده: {dayjs(r.created_at).fromNow()}</div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {user && user.id === r.user_id ? (
+                      {user && (user.id === r.user_id || isAdminUser(user)) ? (
                         <>
                           <button onClick={() => startEdit(r)} className="px-3 py-1 bg-white/10 text-white rounded">ویرایش</button>
                           <button onClick={() => remove(r.id)} className="px-3 py-1 bg-red-600 text-white rounded">حذف</button>
