@@ -5,13 +5,11 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import clsx from 'clsx';
 import './index.css';
 
-dayjs.extend(relativeTime);
 import jalaliday from 'jalaliday';
 
 dayjs.extend(relativeTime);
 dayjs.extend(jalaliday);
 dayjs.calendar('persian');
-
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
